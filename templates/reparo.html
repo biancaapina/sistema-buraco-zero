@@ -33,6 +33,10 @@
         
         button[type="submit"] { background: var(--accent); color: white; border: none; padding: 12px; margin-top: 25px; width: 100%; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         button[type="submit"]:hover { background: var(--primary-dark); }
+
+        .denuncia-selecionada { background: #eef6ff; border-left: 4px solid var(--accent); padding: 14px 16px; border-radius: 4px; margin-bottom: 20px; font-size: 0.9rem; color: #333; }
+        .denuncia-selecionada strong { color: var(--primary); }
+        .denuncia-selecionada p { margin: 4px 0; }
     </style>
 </head>
 <body>
@@ -41,24 +45,30 @@
         <a href="/" class="btn-voltar" aria-label="Voltar para a página principal">← Voltar</a>
     </header>
     <div class="container">
+
+        {% if denuncia %}
+        <div class="denuncia-selecionada">
+            <p><strong>Denúncia selecionada nº {{ denuncia.id }}</strong></p>
+            <p>Endereço: {{ denuncia.localizacao }} — {{ denuncia.bairro }}</p>
+            <p>Descrição original: {{ denuncia.descricao }}</p>
+            <p>Status atual: {{ denuncia.status }}</p>
+        </div>
+        {% endif %}
+
         <!-- Rota corrigida para 'reparo' -->
         <form action="{{ url_for('reparo') }}" method="POST" enctype="multipart/form-data">
-            
-            <div class="secao-titulo" aria-hidden="true">👤 1. Dados do Cidadão</div>
-            
-            <label for="nome">Nome Completo:</label>
-            <input type="text" id="nome" name="nome" required placeholder="Ex: Maria da Silva" aria-label="Nome Completo">
 
-            <label for="cpf">CPF (Sigiloso / Uso restrito):</label>
-            <input type="text" id="cpf" name="cpf" required placeholder="000.000.000-00" maxlength="14" aria-label="CPF, dado sigiloso e de uso restrito">
+            <input type="hidden" name="denuncia_id" value="{{ denuncia.id if denuncia else '' }}">
+            <input type="hidden" name="nome" value="{{ denuncia.nome if denuncia else '' }}">
+            <input type="hidden" name="cpf" value="{{ denuncia.cpf if denuncia else '' }}">
 
             <div class="secao-titulo" aria-hidden="true">📍 2. Localização do Reparo</div>
             
             <label for="localizacao">Endereço do Ocorrido (Nome da Rua e Número):</label>
-            <input type="text" id="localizacao" name="localizacao" required placeholder="Ex: Avenida Principal, 500" aria-label="Endereço do Ocorrido, Nome da Rua e Número" onchange="buscarCoordenadasGPS()">
+            <input type="text" id="localizacao" name="localizacao" required placeholder="Ex: Avenida Principal, 500" aria-label="Endereço do Ocorrido, Nome da Rua e Número" onchange="buscarCoordenadasGPS()" value="{{ denuncia.localizacao if denuncia else '' }}">
 
             <label for="input-cep">CEP:</label>
-            <input type="text" id="input-cep" name="cep" placeholder="Ex: 06850-010" maxlength="9" aria-label="Código de Endereçamento Postal, CEP">
+            <input type="text" id="input-cep" name="cep" placeholder="Ex: 06850-010" maxlength="9" aria-label="Código de Endereçamento Postal, CEP" value="{{ (denuncia.cep or '') if denuncia else '' }}">
 
             <label for="select-bairro">Bairros:</label>
             <select name="bairro" id="select-bairro" required onchange="verificarOutroBairro(this)" aria-label="Selecione o bairro">
@@ -127,18 +137,6 @@
     </footer>
 
     <script>
-        document.getElementById('cpf').addEventListener('input', function (e) {
-            let value = e.target.value.replace(/\D/g, "");
-            if (value.length > 9) {
-                value = value.replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, "$1.$2.$3-$4");
-            } else if (value.length > 6) {
-                value = value.replace(/^(\d{3})(\d{3})(\d{1,3}).*/, "$1.$2.$3");
-            } else if (value.length > 3) {
-                value = value.replace(/^(\d{3})(\d{1,3}).*/, "$1.$2");
-            }
-            e.target.value = value;
-        });
-
         document.getElementById('input-cep').addEventListener('input', function (e) {
             let value = e.target.value.replace(/\D/g, "");
             if (value.length > 5) {
@@ -232,5 +230,30 @@
             }
         }
     </script>
+
+    {% if denuncia %}
+    <script>
+        // Pré-seleciona o bairro da denúncia de origem no <select>
+        document.addEventListener('DOMContentLoaded', function () {
+            const bairroSelect = document.getElementById('select-bairro');
+            const bairroDenuncia = {{ (denuncia.bairro or '') | tojson }};
+            let encontrado = false;
+
+            for (let i = 0; i < bairroSelect.options.length; i++) {
+                if (bairroSelect.options[i].value === bairroDenuncia) {
+                    bairroSelect.selectedIndex = i;
+                    encontrado = true;
+                    break;
+                }
+            }
+
+            if (!encontrado && bairroDenuncia) {
+                bairroSelect.value = 'Outro Bairro';
+                verificarOutroBairro(bairroSelect);
+                document.getElementById('input-outro-bairro').value = bairroDenuncia;
+            }
+        });
+    </script>
+    {% endif %}
 </body>
 </html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buraco Zero - Buscar Denúncia para Reparo</title>
+    <style>
+        :root { --primary: #004080; --primary-dark: #002b55; --accent: #0056b3; --bg: #f0f4f8; --card-bg: #ffffff; --text: #333333; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background-color: var(--bg); margin: 0; color: var(--text); }
+        header { background-color: var(--primary); color: white; padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid var(--primary-dark); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        header h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+        .btn-voltar { background: rgba(255,255,255,0.15); color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; font-size: 0.85rem; font-weight: 600; transition: background 0.2s; }
+        .btn-voltar:hover { background: rgba(255,255,255,0.3); }
+
+        .container { max-width: 650px; margin: 30px auto; background: var(--card-bg); padding: 35px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border-top: 4px solid var(--accent); }
+
+        p.descricao { color: #555555; line-height: 1.6; margin-bottom: 25px; font-size: 0.95rem; }
+
+        label { display: block; margin-top: 14px; font-weight: 600; font-size: 0.9rem; color: #444444; }
+        input[type="text"] { width: 100%; padding: 10px 12px; margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; font-size: 0.95rem; color: var(--text); background: #f8fafc; }
+        input[type="text"]:focus { outline: none; border-color: var(--accent); background: white; box-shadow: 0 0 0 2px rgba(0,86,179,0.15); }
+
+        .ou { text-align: center; color: #999; font-size: 0.85rem; margin: 14px 0; font-weight: 600; }
+
+        button[type="submit"] { background: var(--accent); color: white; border: none; padding: 12px; margin-top: 25px; width: 100%; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        button[type="submit"]:hover { background: var(--primary-dark); }
+
+        .resultados { margin-top: 30px; }
+        .resultados h3 { color: var(--primary); font-size: 1rem; margin-bottom: 12px; }
+
+        .card-denuncia { border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px 16px; margin-bottom: 12px; background: #f8fafc; }
+        .card-denuncia p { margin: 3px 0; font-size: 0.9rem; }
+        .card-denuncia .status { display: inline-block; background: #e2e8f0; color: var(--primary); font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 3px; text-transform: uppercase; margin-bottom: 6px; }
+
+        .btn-selecionar { display: inline-block; margin-top: 10px; background: var(--accent); color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; font-size: 0.85rem; font-weight: 600; }
+        .btn-selecionar:hover { background: var(--primary-dark); }
+
+        .aviso-vazio { text-align: center; color: #999; padding: 20px 0; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🔎 Buscar Denúncia para Relatar Reparo</h1>
+        <a href="/" class="btn-voltar" aria-label="Voltar para a página principal">← Voltar</a>
+    </header>
+
+    <div class="container">
+        <p class="descricao">Encontre a denúncia de buraco que foi reparada, buscando pelo CEP do local ou pelo CPF de quem denunciou. Assim, o formulário de reparo já vem com os dados preenchidos.</p>
+
+        {% if erro == 'ja_concluida' %}
+        <p class="aviso-vazio" style="color:#dc3545; background:#fdf2f2; border-radius:4px; padding:10px;">Essa denúncia já está marcada como concluída e não pode receber outro relato de reparo.</p>
+        {% endif %}
+
+        <form action="{{ url_for('buscar_reparo') }}" method="GET">
+            <label for="busca-cep">Buscar por CEP:</label>
+            <input type="text" id="busca-cep" name="cep" placeholder="Ex: 06850-010" maxlength="9" value="{{ cep }}">
+
+            <div class="ou">— ou —</div>
+
+            <label for="busca-cpf">Buscar por CPF:</label>
+            <input type="text" id="busca-cpf" name="cpf" placeholder="000.000.000-00" maxlength="14" value="{{ cpf }}">
+
+            <button type="submit">Buscar Denúncia</button>
+        </form>
+
+        {% if buscou %}
+        <div class="resultados">
+            <h3>Resultado da busca</h3>
+
+            {% if resultados|length == 0 %}
+                <p class="aviso-vazio">Nenhuma denúncia encontrada com esses dados. Confira o CEP/CPF digitado e tente novamente.</p>
+            {% else %}
+                {% for d in resultados %}
+                <div class="card-denuncia">
+                    <span class="status">{{ d.status }}</span>
+                    <p><strong>Nº {{ d.id }}</strong></p>
+                    <p>Endereço: {{ d.localizacao }} — {{ d.bairro }}</p>
+                    {% if d.cep %}<p>CEP: {{ d.cep }}</p>{% endif %}
+                    <p>Descrição: {{ d.descricao }}</p>
+                    {% if d.status == 'Concluído' %}
+                        <p class="aviso-vazio" style="text-align:left; padding:0; margin-top:10px;">Esta denúncia já foi concluída e não pode receber outro reparo.</p>
+                    {% else %}
+                        <a class="btn-selecionar" href="{{ url_for('reparo', denuncia_id=d.id) }}">Selecionar esta denúncia →</a>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <footer style="text-align: center; padding: 20px; color: #666; font-size: 0.85rem; border-top: 1px solid #cbd5e1; margin-top: 40px;">
+        Prefeitura Municipal &copy; 2026 - Todos os direitos reservados
+    </footer>
+
+    <script>
+        document.getElementById('busca-cpf').addEventListener('input', function (e) {
+            let value = e.target.value.replace(/\D/g, "");
+            if (value.length > 9) {
+                value = value.replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, "$1.$2.$3-$4");
+            } else if (value.length > 6) {
+                value = value.replace(/^(\d{3})(\d{3})(\d{1,3}).*/, "$1.$2.$3");
+            } else if (value.length > 3) {
+                value = value.replace(/^(\d{3})(\d{1,3}).*/, "$1.$2");
+            }
+            e.target.value = value;
+        });
+
+        document.getElementById('busca-cep').addEventListener('input', function (e) {
+            let value = e.target.value.replace(/\D/g, "");
+            if (value.length > 5) {
+                value = value.replace(/^(\d{5})(\d{1,3}).*/, "$1-$2");
+            }
+            e.target.value = value;
+        });
+    </script>
+</body>
+</html>

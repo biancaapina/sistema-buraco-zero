@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import sqlite3
 import os
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -81,6 +82,18 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
+    # Vincula o reparo à denúncia de origem (para saber de qual denúncia ele veio)
+    try:
+        cursor.execute('ALTER TABLE reparos ADD COLUMN denuncia_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+
+    # Passa a guardar o CEP também na denúncia, para permitir buscar por CEP na hora do reparo
+    try:
+        cursor.execute('ALTER TABLE denuncias ADD COLUMN cep TEXT')
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -96,6 +109,7 @@ def denuncia():
         nome = request.form.get('nome')
         cpf = request.form.get('cpf')
         localizacao = request.form.get('localizacao')
+        cep = request.form.get('cep')
         bairro = request.form.get('bairro')
         descricao = request.form.get('descricao')
         latitude = request.form.get('latitude')
@@ -113,9 +127,9 @@ def denuncia():
         conn = sqlite3.connect('database.db')
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO denuncias (nome, cpf, localizacao, bairro, descricao, foto_path, latitude, longitude)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (nome, cpf, localizacao, bairro, descricao, foto_path, lat, lon))
+            INSERT INTO denuncias (nome, cpf, localizacao, cep, bairro, descricao, foto_path, latitude, longitude)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (nome, cpf, localizacao, cep, bairro, descricao, foto_path, lat, lon))
         conn.commit()
         conn.close()
 
@@ -133,7 +147,8 @@ def reparo():
         localizacao = request.form.get('localizacao')
         bairro = request.form.get('bairro')
         descricao = request.form.get('descricao')
-        
+        denuncia_id = request.form.get('denuncia_id') or None
+
         foto = request.files.get('foto')
         foto_path = None
         if foto and foto.filename != '':
@@ -143,16 +158,76 @@ def reparo():
         conn = sqlite3.connect('database.db')
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO reparos (nome, cpf, cep, localizacao, bairro, descricao, foto_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (nome, cpf, cep, localizacao, bairro, descricao, foto_path))
+            INSERT INTO reparos (nome, cpf, cep, localizacao, bairro, descricao, foto_path, denuncia_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (nome, cpf, cep, localizacao, bairro, descricao, foto_path, denuncia_id))
+
+        # Atualiza o status da denúncia original, já que ela foi reparada
+        if denuncia_id:
+            cursor.execute(
+                "UPDATE denuncias SET status = ? WHERE id = ?",
+                ('Concluído', denuncia_id)
+            )
+
         conn.commit()
         conn.close()
 
         # CORRIGIDO: Redireciona para o index público
         return redirect(url_for('index'))
 
-    return render_template('reparo.html')
+    # Se veio de uma busca (denuncia_id na URL), carrega os dados da denúncia
+    # para pré-preencher o formulário
+    denuncia = None
+    denuncia_id = request.args.get('denuncia_id')
+    if denuncia_id:
+        conn = sqlite3.connect('database.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM denuncias WHERE id = ?', (denuncia_id,))
+        denuncia = cursor.fetchone()
+        conn.close()
+
+        # Trava extra: não permite relatar reparo de uma denúncia já concluída
+        if denuncia and denuncia['status'] == 'Concluído':
+            return redirect(url_for('buscar_reparo', erro='ja_concluida'))
+
+    return render_template('reparo.html', denuncia=denuncia)
+
+
+@app.route('/reparo/buscar')
+def buscar_reparo():
+    cep = request.args.get('cep', '').strip()
+    cpf = request.args.get('cpf', '').strip()
+    erro = request.args.get('erro')
+    resultados = []
+    buscou = False
+
+    if cep or cpf:
+        buscou = True
+        conn = sqlite3.connect('database.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        if cep:
+            # remove pontuação para comparar só os números
+            cep_limpo = re.sub(r'\D', '', cep)
+            cursor.execute('''
+                SELECT * FROM denuncias
+                WHERE REPLACE(REPLACE(COALESCE(cep, ''), '-', ''), '.', '') LIKE ?
+                ORDER BY id DESC
+            ''', (f'%{cep_limpo}%',))
+        else:
+            cpf_limpo = re.sub(r'\D', '', cpf)
+            cursor.execute('''
+                SELECT * FROM denuncias
+                WHERE REPLACE(REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', ''), ' ', '') LIKE ?
+                ORDER BY id DESC
+            ''', (f'%{cpf_limpo}%',))
+
+        resultados = cursor.fetchall()
+        conn.close()
+
+    return render_template('buscar_reparo.html', resultados=resultados, buscou=buscou, cep=cep, cpf=cpf, erro=erro)
 
 @app.route('/painel')
 def painel():
