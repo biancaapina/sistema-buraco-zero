@@ -133,7 +133,6 @@ def denuncia():
         conn.commit()
         conn.close()
 
-        # CORRIGIDO: Redireciona para o index público em vez do painel público antigo
         return redirect(url_for('index'))
 
     return render_template('denuncia.html')
@@ -162,7 +161,6 @@ def reparo():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (nome, cpf, cep, localizacao, bairro, descricao, foto_path, denuncia_id))
 
-        # Atualiza o status da denúncia original, já que ela foi reparada
         if denuncia_id:
             cursor.execute(
                 "UPDATE denuncias SET status = ? WHERE id = ?",
@@ -172,11 +170,8 @@ def reparo():
         conn.commit()
         conn.close()
 
-        # CORRIGIDO: Redireciona para o index público
         return redirect(url_for('index'))
 
-    # Se veio de uma busca (denuncia_id na URL), carrega os dados da denúncia
-    # para pré-preencher o formulário
     denuncia = None
     denuncia_id = request.args.get('denuncia_id')
     if denuncia_id:
@@ -187,7 +182,6 @@ def reparo():
         denuncia = cursor.fetchone()
         conn.close()
 
-        # Trava extra: não permite relatar reparo de uma denúncia já concluída
         if denuncia and denuncia['status'] == 'Concluído':
             return redirect(url_for('buscar_reparo', erro='ja_concluida'))
 
@@ -209,7 +203,6 @@ def buscar_reparo():
         cursor = conn.cursor()
 
         if cep:
-            # remove pontuação para comparar só os números
             cep_limpo = re.sub(r'\D', '', cep)
             cursor.execute('''
                 SELECT * FROM denuncias
@@ -391,4 +384,4 @@ def api_denuncias():
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
